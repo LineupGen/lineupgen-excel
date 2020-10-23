@@ -1,0 +1,144 @@
+name: LineupGen
+description: Generate unique DFS DraftKings lineups based on competition player data.
+host: EXCEL
+api_set: {}
+script:
+  content: |
+    /*
+     * Copyright (c) LineupGen, lineupgen.com. All rights reserved.
+     */
+
+    /**
+     * Generate unique DFS lineups based on competition player data.
+     *
+     * @customfunction LINEUPS
+     * @helpurl https://lineupgen.com/excel/
+     *
+     * @param {string} token LineupGen account token
+     * @param {any[][]} players Player data for competition
+     * @param {string} sport sport "CFB", "GOLF", "MLB", "MMA", "NAS", "NBA", "NFL", "SOC", "TEN"
+     * @param {number} [num] Number of lineups to generate. If omitted, num = 1.
+     * @param {number} [min_salary_cap] Minimum total cost of each lineup. If omitted, min_salary_cap = 0.
+     * @param {number}  [max_salary_cap] Maximum total cost of each lineup. If omitted, max_salary_cap = 50000.
+     * @param {boolean} [show_total_cost] Show total cost for each lineup. If omitted, show_total_cost = FALSE.
+     * @param {boolean} [multi_team] Players from more than 1 team are required in each lineup. If omitted, multi_team = FALSE.
+     * @param {boolean} [multi_game] Players from more than 1 game are required in each lineup. If omitted, multi_game = FALSE.
+     * @return {any[][]} Unique lineups to be uploaded
+     *
+     */
+    async function LINEUPS(
+      token,
+      players,
+      sport,
+      num,
+      min_salary_cap,
+      max_salary_cap,
+      show_total_cost,
+      multi_team,
+      multi_game
+    ) {
+      // let token = await OfficeRuntime.storage.getItem("lineupgenToken");
+
+      if (!token) {
+        throw new CustomFunctions.Error(
+          CustomFunctions.ErrorCode.invalidValue,
+          "Token is required. Configure using LineupGen Taskpane form."
+        );
+      }
+
+      if (!players) {
+        throw new CustomFunctions.Error(CustomFunctions.ErrorCode.invalidValue, "Player data is required.");
+      }
+
+      // check headers
+      const reqPlayerHeaders = ["Name + ID", "Name", "ID", "Roster Position", "Salary", "Game Info", "TeamAbbrev"];
+      for (let i = 0; i < reqPlayerHeaders.length; i++) {
+        if (!players[0].includes(reqPlayerHeaders[i])) {
+          throw new CustomFunctions.Error(
+            CustomFunctions.ErrorCode.invalidValue,
+            "Missing column (" + reqPlayerHeaders[i] + ") is required."
+          );
+        }
+      }
+
+      if (!sport) {
+        throw new CustomFunctions.Error(CustomFunctions.ErrorCode.invalidValue, "Sport is required.");
+      }
+
+      const allowedSports = ["CFB", "GOLF", "MLB", "MMA", "NAS", "NBA", "NFL", "SOC", "TEN"];
+      if (!allowedSports.includes(sport)) {
+        throw new CustomFunctions.Error(CustomFunctions.ErrorCode.invalidValue, "Sport value not recognized.");
+      }
+
+      if (num === null) {
+        num = 1;
+      }
+
+      if (min_salary_cap === null) {
+        min_salary_cap = 0;
+      }
+
+      if (max_salary_cap === null) {
+        max_salary_cap = 50000;
+      }
+
+      if (show_total_cost === null) {
+        show_total_cost = false;
+      }
+
+      if (multi_team === null) {
+        multi_team = false;
+      }
+
+      if (multi_game === null) {
+        multi_game = false;
+      }
+
+      if (min_salary_cap >= max_salary_cap) {
+        throw new CustomFunctions.Error(
+          CustomFunctions.ErrorCode.invalidValue,
+          "Minimum salary cap must be less than maximum."
+        );
+      }
+
+      try {
+        const url = `https://api.lineupgen.com/v1/lineups/generate`;
+        const response = await fetch(url, {
+          headers: {
+            Authorization: "Token " + token,
+            "Content-Type": "application/json"
+          },
+
+          method: "POST",
+          body: JSON.stringify({
+            players,
+            sport,
+            num,
+            min_salary_cap,
+            max_salary_cap,
+            show_total_cost,
+            multi_team,
+            multi_game
+          })
+        });
+
+        const jsonResponse = await response.json();
+
+        //Expect that status code is in 200-299 range
+        if (!response.ok) {
+          if (jsonResponse && jsonResponse.message) {
+            throw new CustomFunctions.Error(CustomFunctions.ErrorCode.invalidValue, jsonResponse.message);
+          } else {
+            throw new CustomFunctions.Error(CustomFunctions.ErrorCode.invalidValue, response.statusText);
+          }
+        }
+        return jsonResponse.lineups;
+      } catch (error) {
+        return error;
+      }
+    }
+  language: typescript
+libraries: |-
+  https://appsforoffice.microsoft.com/lib/1/hosted/office.js
+  @types/office-js
+  core-js@2.4.1/client/core.min.js
